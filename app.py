@@ -15,4 +15,8 @@ def upload_file():
     if file.filename == "":
         return "No selected file", 400
 
+    # Log confirmation to the server logs
+    print(f"Received file: {file.filename}, size: {len(file.read())} bytes")
+    file.seek(0)  # Reset file pointer if you want to process it later
+
     return f"We have received {file.filename}"
