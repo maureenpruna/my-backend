@@ -1,4 +1,6 @@
 from flask import Flask, request
+from openpyxl import load_workbook
+import io
 
 app = Flask(__name__)
 
@@ -13,10 +15,17 @@ def upload_file():
     if file.filename == "":
         return "No selected file", 400
 
-    # For now, just return confirmation
-    #return f"Received {file.filename} for Deal {deal_id}"
-        # Get file size in bytes
-    file_size = len(file.read())
-    file.seek(0)  # Reset pointer if you need to process the file later
+    # Get file size
+    file.stream.seek(0, 2)  # move to end
+    file_size = file.stream.tell()
+    file.stream.seek(0)  # reset pointer
 
-    return f"Received {file.filename} with size {file_size} bytes for Deal {deal_id}"
+    # Read the Excel file
+    in_memory_file = io.BytesIO(file.read())
+    workbook = load_workbook(filename=in_memory_file, read_only=True)
+    sheet_names = workbook.sheetnames  # List of tab names
+
+    return f"Received {file.filename} with size {file_size} bytes for Deal {deal_id}. Tabs: {', '.join(sheet_names)}"
+
+if __name__ == "__main__":
+    app.run(debug=True)
