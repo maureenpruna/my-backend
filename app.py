@@ -1,6 +1,6 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from openpyxl import load_workbook
-import io
+from io import BytesIO
 import base64
 
 app = Flask(__name__)
@@ -9,22 +9,31 @@ app = Flask(__name__)
 def upload_file():
     data = request.get_json()
 
-    if not data or "file_base64" not in data:
-        return "No file data received", 400
+    deal_id = data.get("deal_id")
+    filename = data.get("filename")
+    file_base64 = data.get("file_base64")
 
-    file_base64 = data["file_base64"]
-    file_bytes = base64.b64decode(file_base64)
-
-    deal_id = data.get("deal_id", "Unknown")
-    filename = data.get("filename", "Unknown.xlsx")
-
-    # Read Excel in memory
-    in_memory_file = io.BytesIO(file_bytes)
+    if not file_base64:
+        return "No file received", 400
 
     try:
+        # Decode Base64 to bytes
+        file_bytes = base64.b64decode(file_base64)
+        in_memory_file = BytesIO(file_bytes)
+
+        # Open the Excel workbook
         workbook = load_workbook(filename=in_memory_file, read_only=True)
         sheet_names = workbook.sheetnames
-    except Exception as e:
-        return f"Failed to read Excel file: {str(e)}", 400
 
-    return f"Received {filename} with {len(file_bytes)} bytes for Deal {deal_id}. Sheets: {sheet_names}"
+        # Return a summary
+        return jsonify({
+            "message": f"Received {filename} for Deal {deal_id}",
+            "sheets": sheet_names,
+            "size_bytes": len(file_bytes)
+        })
+
+    except Exception as e:
+        return f"Failed to read Excel file: {str(e)}", 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
