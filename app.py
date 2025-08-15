@@ -1,31 +1,30 @@
 from flask import Flask, request
 from openpyxl import load_workbook
 import io
+import base64
 
 app = Flask(__name__)
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    if "file" not in request.files:
-        return "No file part", 400
+    data = request.get_json()
 
-    file = request.files["file"]
-    deal_id = request.form.get("deal_id")
+    if not data or "file_base64" not in data:
+        return "No file data received", 400
 
-    if file.filename == "":
-        return "No selected file", 400
+    file_base64 = data["file_base64"]
+    file_bytes = base64.b64decode(file_base64)
 
-    # Get file size
-    file.stream.seek(0, 2)  # move to end
-    file_size = file.stream.tell()
-    file.stream.seek(0)  # reset pointer
+    deal_id = data.get("deal_id", "Unknown")
+    filename = data.get("filename", "Unknown.xlsx")
 
-    # Read the Excel file
-    in_memory_file = io.BytesIO(file.read())
-    workbook = load_workbook(filename=in_memory_file, read_only=True)
-    sheet_names = workbook.sheetnames  # List of tab names
+    # Read Excel in memory
+    in_memory_file = io.BytesIO(file_bytes)
 
-    return f"Received {file.filename} with size {file_size} bytes for Deal {deal_id}. Tabs: {', '.join(sheet_names)}"
+    try:
+        workbook = load_workbook(filename=in_memory_file, read_only=True)
+        sheet_names = workbook.sheetnames
+    except Exception as e:
+        return f"Failed to read Excel file: {str(e)}", 400
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    return f"Received {filename} with {len(file_bytes)} bytes for Deal {deal_id}. Sheets: {sheet_names}"
