@@ -1,42 +1,34 @@
 from flask import Flask, request, jsonify
 from openpyxl import load_workbook
-from werkzeug.utils import secure_filename
-import os
+from io import BytesIO
+import base64
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
     try:
-        # Get dealId from URL
-        deal_id = request.args.get("dealId")
-        if not deal_id:
-            return jsonify({"error": "Missing dealId", "success": False}), 400
+        data = request.get_json()
+        deal_id = data.get("dealId")
+        filename = data.get("filename")
+        file_base64 = data.get("fileBase64")
 
-        if "file" not in request.files:
-            return jsonify({"error": "No file part", "success": False}), 400
+        if not file_base64:
+            return jsonify({"error": "No file received", "success": False}), 400
 
-        file = request.files["file"]
-        if file.filename == "":
-            return jsonify({"error": "No file selected", "success": False}), 400
+        # Decode Base64 to bytes
+        file_bytes = base64.b64decode(file_base64)
+        in_memory_file = BytesIO(file_bytes)
 
-        filename = secure_filename(file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(save_path)
-
-        # Read Excel and get sheet names
-        workbook = load_workbook(save_path, read_only=True)
+        # Open Excel workbook
+        workbook = load_workbook(filename=in_memory_file, read_only=True)
         sheet_names = workbook.sheetnames
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
             "filename": filename,
-            "sheets": sheet_names,
-            "message": "File uploaded and processed successfully"
+            "sheets": sheet_names
         })
 
     except Exception as e:
