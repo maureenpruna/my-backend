@@ -5,38 +5,41 @@ import pandas as pd
 
 app = Flask(__name__)
 
-@app.route('/process', methods=['POST'])
-def process_request():
+@app.route('/upload', methods=['POST'])
+def upload_file():
     try:
-        # Case 1: If dealId is sent in JSON (existing working part)
+        # Case 1: dealId in JSON (optional, if you want to support JSON POST)
         if request.is_json:
             data = request.get_json()
             deal_id = data.get("dealId")
             if deal_id:
-                # keep your existing logic for dealId
                 return jsonify({"message": f"DealId {deal_id} received and processed."})
 
-        # Case 2: If file is uploaded
+        # Case 2: File upload with dealId as form-data
         if "file" in request.files:
             file = request.files["file"]
+            deal_id = request.form.get("dealId")
 
             if file.filename == "":
                 return jsonify({"error": "No file selected"}), 400
 
-            # Save to temp file
+            # Save to temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
                 file.save(tmp.name)
                 tmp_path = tmp.name
 
             try:
-                # Read Excel file
-                df = pd.read_excel(tmp_path, engine="openpyxl")
-                os.remove(tmp_path)  # clean up temp file
+                # Load Excel file and get sheet names
+                excel_file = pd.ExcelFile(tmp_path, engine="openpyxl")
+                sheet_names = excel_file.sheet_names
 
-                # Example: return first 5 rows as JSON
+                os.remove(tmp_path)  # clean up
+
                 return jsonify({
                     "message": "Excel file processed successfully",
-                    "data_preview": df.head().to_dict(orient="records")
+                    "dealId": deal_id,
+                    "filename": file.filename,
+                    "sheets": sheet_names
                 })
 
             except Exception as e:
@@ -48,5 +51,5 @@ def process_request():
         return jsonify({"error": str(e)}), 500
 
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
