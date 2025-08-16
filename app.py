@@ -1,39 +1,56 @@
 from flask import Flask, request, jsonify
-from openpyxl import load_workbook
-from io import BytesIO
-import base64
+import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
+# where to temporarily save uploads
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {"xlsx", "xls"}
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    data = request.get_json()
-
-    deal_id = data.get("deal_id")
-    filename = data.get("filename")
-    file_base64 = data.get("file_base64")
-
-    if not file_base64:
-        return "No file received", 400
-
     try:
-        # Decode Base64 to bytes
-        file_bytes = base64.b64decode(file_base64)
-        in_memory_file = BytesIO(file_bytes)
+        # check if the request has the file part
+        if "file" not in request.files:
+            return jsonify({"error": "No file part in request"}), 400
 
-        # Open the Excel workbook
-        workbook = load_workbook(filename=in_memory_file, read_only=True)
-        sheet_names = workbook.sheetnames
+        file = request.files["file"]
+        deal_id = request.form.get("dealId")  # string param
 
-        # Return a summary
-        return jsonify({
-            "message": f"Received {filename} for Deal {deal_id}",
-            "sheets": sheet_names,
-            "size_bytes": len(file_bytes)
-        })
+        if not deal_id:
+            return jsonify({"error": "Missing dealId"}), 400
+
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(save_path)
+
+            # ✅ Here you can process the Excel file (e.g., pandas openpyxl)
+            # Example: read with pandas
+            # import pandas as pd
+            # df = pd.read_excel(save_path)
+
+            return jsonify({
+                "message": "File uploaded successfully",
+                "dealId": deal_id,
+                "filename": filename,
+                "path": save_path
+            }), 200
+        else:
+            return jsonify({"error": "Invalid file type, only xls/xlsx allowed"}), 400
 
     except Exception as e:
-        return f"Failed to read Excel file: {str(e)}", 500
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
