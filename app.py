@@ -1,53 +1,44 @@
 from flask import Flask, request, jsonify
-import pandas as pd
+import tempfile
 import os
-from werkzeug.utils import secure_filename
+from openpyxl import load_workbook
 
 app = Flask(__name__)
 
-# Allow only Excel file extensions
-ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/process_excel', methods=['POST'])
-def process_excel():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    
-    file = request.files['file']
-
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({"error": "Invalid file type. Only .xls or .xlsx allowed"}), 400
-
+@app.route('/upload', methods=['POST'])
+def upload_file():
     try:
-        filename = secure_filename(file.filename)
-        filepath = os.path.join("/tmp", filename)  # temp save
-        file.save(filepath)
+        # Ensure both dealId and file are present
+        deal_id = request.form.get("dealId")
+        if not deal_id:
+            return jsonify({"success": False, "error": "Missing dealId"}), 400
 
-        excel_data = pd.ExcelFile(filepath)
+        if "file" not in request.files:
+            return jsonify({"success": False, "error": "Missing file"}), 400
 
-        result = {}
-        for sheet in excel_data.sheet_names:
-            df = pd.read_excel(filepath, sheet_name=sheet)
-            result[sheet] = df.to_dict(orient='records')
+        uploaded_file = request.files["file"]
 
-        os.remove(filepath)  # cleanup temp file
+        # Save file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            uploaded_file.save(tmp.name)
+            tmp_path = tmp.name
 
-        return jsonify({"sheets": result})
+        # Load workbook
+        wb = load_workbook(tmp_path, read_only=True)
+        sheet_names = wb.sheetnames
+        wb.close()
+
+        # Cleanup temp file
+        os.remove(tmp_path)
+
+        return jsonify({
+            "success": True,
+            "dealId": deal_id,
+            "sheets": sheet_names
+        })
 
     except Exception as e:
-        return jsonify({"error": f"Failed to process Excel file: {str(e)}"}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-
-@app.route('/')
-def home():
-    return "Excel Processing API is running!"
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(debug=True)
