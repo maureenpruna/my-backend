@@ -27,6 +27,7 @@ def upload_file():
             return jsonify({"error": "No file received", "success": False}), 400
 
         fabric_labels_all = []
+        bottom_labels_all = []
 
         for file in files:
             if file and allowed_file(file.filename):
@@ -40,15 +41,14 @@ def upload_file():
                 
                 if "RB Label" in workbook.sheetnames:
                     sheet = workbook["RB Label"]
-                    fabric_labels = []
 
                     for row in sheet.iter_rows(min_row=2):  # start from row 2
                         job_code = row[0].value  # Column A
                         if job_code:  # only if column A is not empty
-                            cell_w = row[22].value  # Column W (0-indexed)
-                            fabric_labels.append(cell_w)
-
-                    fabric_labels_all.extend(fabric_labels)
+                            cell_w = row[22].value  # Column W (Fabric Label)
+                            cell_x = row[23].value  # Column X (Bottom Label)
+                            fabric_labels_all.append(cell_w)
+                            bottom_labels_all.append(cell_x)
 
             else:
                 continue
@@ -56,9 +56,11 @@ def upload_file():
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "fabric_labels": fabric_labels_all,
-            "fabric_labels_count": len(fabric_labels_all),
-            "message": "Fabric labels extracted successfully"
+            "Fabric Label": fabric_labels_all,
+            "Bottom Label": bottom_labels_all,
+            "Fabric Label count": len(fabric_labels_all),
+            "Bottom Label count": len(bottom_labels_all),
+            "message": "Fabric and Bottom labels extracted successfully"
         })
 
     except Exception as e:
