@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from openpyxl import load_workbook
 from werkzeug.utils import secure_filename
 import os
+import requests
 
 app = Flask(__name__)
 
@@ -12,17 +13,6 @@ ALLOWED_EXTENSIONS = {"xlsx", "xls"}
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def extract_labels(sheet):
-    """Extract Fabric and Bottom labels from the given sheet (Columns W & X), only rows with Column A not empty."""
-    fabric_labels = []
-    bottom_labels = []
-    for row in sheet.iter_rows(min_row=2):
-        job_code = row[0].value  # Column A
-        if job_code:
-            fabric_labels.append(row[22].value)  # Column W
-            bottom_labels.append(row[23].value)  # Column X
-    return fabric_labels, bottom_labels
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -37,56 +27,70 @@ def upload_file():
         if not files:
             return jsonify({"error": "No file received", "success": False}), 400
 
-        response_files = []
+        result_data = {}
 
         for file in files:
             if file and allowed_file(file.filename):
+                # Save the file locally
                 filename = secure_filename(file.filename)
                 save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
                 file.save(save_path)
 
-                workbook = load_workbook(save_path, data_only=True)
+                # Open workbook
+                workbook = load_workbook(save_path, data_only=True, read_only=True)
 
-                # RB Labels
-                if "RB Label" in workbook.sheetnames:
-                    rb_sheet = workbook["RB Label"]
-                    rb_fabric, rb_bottom = extract_labels(rb_sheet)
-                else:
-                    rb_fabric, rb_bottom = [], []
+                # --- Process RB Label ---
+                rb_sheet = workbook["RB Label"] if "RB Label" in workbook.sheetnames else None
+                rb_data = {"Fabric Label": [], "Fabric Label count": 0,
+                           "Bottom Label": [], "Bottom Label count": 0}
+                if rb_sheet:
+                    for row in rb_sheet.iter_rows(min_row=2):
+                        if row[0].value:  # Column A is Job Code
+                            # Column W -> Fabric Label (index 22)
+                            if len(row) > 22:
+                                rb_data["Fabric Label"].append(row[22].value)
+                            # Column X -> Bottom Label (index 23)
+                            if len(row) > 23:
+                                rb_data["Bottom Label"].append(row[23].value)
+                    rb_data["Fabric Label count"] = len(rb_data["Fabric Label"])
+                    rb_data["Bottom Label count"] = len(rb_data["Bottom Label"])
+                result_data["RB"] = rb_data
 
-                # CTN Labels
-                if "CTN Label" in workbook.sheetnames:
-                    ctn_sheet = workbook["CTN Label"]
-                    ctn_fabric, ctn_bottom = extract_labels(ctn_sheet)
-                else:
-                    ctn_fabric, ctn_bottom = [], []
+                # --- Process CTN Label ---
+                ctn_sheet = workbook["CTN Label"] if "CTN Label" in workbook.sheetnames else None
+                ctn_data = {"Fabric Label": [], "Fabric Label count": 0,
+                            "Bottom Label": [], "Bottom Label count": 0}
+                if ctn_sheet:
+                    for row in ctn_sheet.iter_rows(min_row=2):
+                        if row[0].value:  # Column A is Job Code
+                            if len(row) > 22:
+                                ctn_data["Fabric Label"].append(row[22].value)
+                            if len(row) > 23:
+                                ctn_data["Bottom Label"].append(row[23].value)
+                    ctn_data["Fabric Label count"] = len(ctn_data["Fabric Label"])
+                    ctn_data["Bottom Label count"] = len(ctn_data["Bottom Label"])
+                result_data["CTN"] = ctn_data
 
-                response_files.append({
-                    "filename": filename,
-                    "RB": {
-                        "Fabric Label": rb_fabric,
-                        "Fabric Label count": len(rb_fabric),
-                        "Bottom Label": rb_bottom,
-                        "Bottom Label count": len(rb_bottom)
-                    },
-                    "CTN": {
-                        "Fabric Label": ctn_fabric,
-                        "Fabric Label count": len(ctn_fabric),
-                        "Bottom Label": ctn_bottom,
-                        "Bottom Label count": len(ctn_bottom)
-                    }
-                })
+                # Send data to Zoho CRM
+                crm_endpoint = "https://www.zohoapis.com.au/crm/v7/functions/parsedexceldata/actions/execute?auth_type=apikey&zapikey=1003.7aca215a9c900fecfbe589e436532a6a.560d726649a7d347aa1025a35d19c914"
+                payload = {
+                    "dealId": deal_id,
+                    "data": result_data
+                }
+                headers = {"Content-Type": "application/json"}
+                crm_response = requests.post(crm_endpoint, json=payload, headers=headers)
+
+                # Delete the uploaded file
+                os.remove(save_path)
+
             else:
-                response_files.append({
-                    "filename": file.filename,
-                    "error": "Invalid file type, only xls/xlsx allowed"
-                })
+                return jsonify({"error": f"Invalid file type for {file.filename}", "success": False}), 400
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "files": response_files,
-            "message": "Labels extracted successfully"
+            "message": "Files uploaded, processed, sent to CRM, and removed successfully",
+            "crm_response": crm_response.json()
         })
 
     except Exception as e:
