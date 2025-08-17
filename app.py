@@ -21,38 +21,43 @@ def upload_file():
         if not deal_id:
             return jsonify({"error": "Missing dealId", "success": False}), 400
 
-        # Get uploaded file
+        # Collect all uploaded files regardless of key
         files = list(request.files.values())
         if not files:
             return jsonify({"error": "No file received", "success": False}), 400
 
-        file = files[0]
-        if not file or not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file type, only xls/xlsx allowed", "success": False}), 400
+        fabric_labels_all = []
 
-        # Save the file
-        filename = secure_filename(file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(save_path)
+        for file in files:
+            if file and allowed_file(file.filename):
+                # Save the file locally
+                filename = secure_filename(file.filename)
+                save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                file.save(save_path)
 
-        # Read Excel workbook
-        workbook = load_workbook(save_path, read_only=True)
-        if "RB Label" not in workbook.sheetnames:
-            return jsonify({"error": "'RB Label' sheet not found", "success": False}), 400
+                # Open workbook with data_only=True to get calculated values
+                workbook = load_workbook(save_path, data_only=True)
+                
+                if "RB Label" in workbook.sheetnames:
+                    sheet = workbook["RB Label"]
+                    fabric_labels = []
 
-        sheet = workbook["RB Label"]
-        fabric_values = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):  # skip header
-            job_code = row[0]  # Column A
-            fabric_label = row[22] if len(row) > 22 else None  # Column W
-            if job_code not in (None, "") and fabric_label not in (None, ""):
-                fabric_values.append(fabric_label)
+                    for row in sheet.iter_rows(min_row=2):  # start from row 2
+                        job_code = row[0].value  # Column A
+                        if job_code:  # only if column A is not empty
+                            cell_w = row[22].value  # Column W (0-indexed)
+                            fabric_labels.append(cell_w)
+
+                    fabric_labels_all.extend(fabric_labels)
+
+            else:
+                continue
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "fabric_labels_count": len(fabric_values),
-            "fabric_labels": fabric_values,
+            "fabric_labels": fabric_labels_all,
+            "fabric_labels_count": len(fabric_labels_all),
             "message": "Fabric labels extracted successfully"
         })
 
