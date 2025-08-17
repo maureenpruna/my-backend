@@ -1,34 +1,35 @@
 from flask import Flask, request, jsonify
-from openpyxl import load_workbook
-from io import BytesIO
-import base64
+import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
+UPLOAD_FOLDER = "uploads"  # Folder on the server where files are saved
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+ALLOWED_EXTENSIONS = {"xlsx", "xls"}
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    data = request.get_json()
-    deal_id = data.get("deal_id")
-    filename = data.get("filename")
-    file_base64 = data.get("file_base64")
+    if "file" not in request.files:
+        return jsonify({"error": "No file received"}), 400
 
-    if not file_base64:
-        return jsonify({"error": "No file received", "success": False}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
 
-    try:
-        file_bytes = base64.b64decode(file_base64)
-        in_memory_file = BytesIO(file_bytes)
+    if file and allowed_file(file.filename):
+        # Save file locally with fixed name
+        ext = file.filename.rsplit(".", 1)[1].lower()
+        filename = f"localfile.{ext}"
+        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(save_path)
 
-        workbook = load_workbook(filename=in_memory_file, read_only=True)
-        sheet_names = workbook.sheetnames
-
-        return jsonify({
-            "message": f"Received {filename} for Deal {deal_id}",
-            "sheets": sheet_names,
-            "success": True
-        })
-    except Exception as e:
-        return jsonify({"error": f"Failed to read Excel file: {str(e)}", "success": False}), 500
+        return jsonify({"success": True, "message": f"File saved as {filename}", "path": save_path})
+    else:
+        return jsonify({"error": "Invalid file type"}), 400
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
