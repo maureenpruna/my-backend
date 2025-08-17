@@ -13,6 +13,17 @@ ALLOWED_EXTENSIONS = {"xlsx", "xls"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def extract_labels(sheet):
+    """Extract Fabric and Bottom labels from the given sheet (Columns W & X), only rows with Column A not empty."""
+    fabric_labels = []
+    bottom_labels = []
+    for row in sheet.iter_rows(min_row=2):
+        job_code = row[0].value  # Column A
+        if job_code:
+            fabric_labels.append(row[22].value)  # Column W
+            bottom_labels.append(row[23].value)  # Column X
+    return fabric_labels, bottom_labels
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     try:
@@ -26,41 +37,56 @@ def upload_file():
         if not files:
             return jsonify({"error": "No file received", "success": False}), 400
 
-        fabric_labels_all = []
-        bottom_labels_all = []
+        response_files = []
 
         for file in files:
             if file and allowed_file(file.filename):
-                # Save the file locally
                 filename = secure_filename(file.filename)
                 save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
                 file.save(save_path)
 
-                # Open workbook with data_only=True to get calculated values
                 workbook = load_workbook(save_path, data_only=True)
-                
+
+                # RB Labels
                 if "RB Label" in workbook.sheetnames:
-                    sheet = workbook["RB Label"]
+                    rb_sheet = workbook["RB Label"]
+                    rb_fabric, rb_bottom = extract_labels(rb_sheet)
+                else:
+                    rb_fabric, rb_bottom = [], []
 
-                    for row in sheet.iter_rows(min_row=2):  # start from row 2
-                        job_code = row[0].value  # Column A
-                        if job_code:  # only if column A is not empty
-                            cell_w = row[22].value  # Column W (Fabric Label)
-                            cell_x = row[23].value  # Column X (Bottom Label)
-                            fabric_labels_all.append(cell_w)
-                            bottom_labels_all.append(cell_x)
+                # CTN Labels
+                if "CTN Label" in workbook.sheetnames:
+                    ctn_sheet = workbook["CTN Label"]
+                    ctn_fabric, ctn_bottom = extract_labels(ctn_sheet)
+                else:
+                    ctn_fabric, ctn_bottom = [], []
 
+                response_files.append({
+                    "filename": filename,
+                    "RB": {
+                        "Fabric Label": rb_fabric,
+                        "Fabric Label count": len(rb_fabric),
+                        "Bottom Label": rb_bottom,
+                        "Bottom Label count": len(rb_bottom)
+                    },
+                    "CTN": {
+                        "Fabric Label": ctn_fabric,
+                        "Fabric Label count": len(ctn_fabric),
+                        "Bottom Label": ctn_bottom,
+                        "Bottom Label count": len(ctn_bottom)
+                    }
+                })
             else:
-                continue
+                response_files.append({
+                    "filename": file.filename,
+                    "error": "Invalid file type, only xls/xlsx allowed"
+                })
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "Fabric Label": fabric_labels_all,
-            "Bottom Label": bottom_labels_all,
-            "Fabric Label count": len(fabric_labels_all),
-            "Bottom Label count": len(bottom_labels_all),
-            "message": "Fabric and Bottom labels extracted successfully"
+            "files": response_files,
+            "message": "Labels extracted successfully"
         })
 
     except Exception as e:
