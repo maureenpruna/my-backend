@@ -1,35 +1,59 @@
 from flask import Flask, request, jsonify
-import os
+from openpyxl import load_workbook
 from werkzeug.utils import secure_filename
+import os
 
 app = Flask(__name__)
-
-UPLOAD_FOLDER = "uploads"  # Folder on the server where files are saved
+UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-ALLOWED_EXTENSIONS = {"xlsx", "xls"}
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file received"}), 400
+    try:
+        # Get dealId from URL
+        deal_id = request.args.get("dealId")
+        if not deal_id:
+            return jsonify({"error": "Missing dealId", "success": False}), 400
 
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "No file selected"}), 400
+        # Check if any files are uploaded
+        if not request.files:
+            return jsonify({"error": "No files received", "success": False}), 400
 
-    if file and allowed_file(file.filename):
-        # Save file locally with fixed name
-        ext = file.filename.rsplit(".", 1)[1].lower()
-        filename = f"localfile.{ext}"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(save_path)
+        files = request.files.getlist("file")  # get all uploaded files
+        result = []
 
-        return jsonify({"success": True, "message": f"File saved as {filename}", "path": save_path})
-    else:
-        return jsonify({"error": "Invalid file type"}), 400
+        for file in files:
+            if file.filename == "":
+                continue  # skip empty filenames
+
+            filename = secure_filename(file.filename)
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(save_path)
+
+            # Read Excel and get sheet names
+            try:
+                workbook = load_workbook(save_path, read_only=True)
+                sheet_names = workbook.sheetnames
+            except Exception as e:
+                sheet_names = []
+                return jsonify({"error": f"Failed to process Excel file {filename}: {str(e)}", "success": False}), 500
+
+            result.append({
+                "filename": filename,
+                "sheets": sheet_names
+            })
+
+        return jsonify({
+            "success": True,
+            "dealId": deal_id,
+            "files": result,
+            "message": "Files uploaded and processed successfully"
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}", "success": False}), 500
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
