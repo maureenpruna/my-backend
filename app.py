@@ -4,9 +4,14 @@ from werkzeug.utils import secure_filename
 import os
 
 app = Flask(__name__)
+
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {"xlsx", "xls"}
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -16,47 +21,39 @@ def upload_file():
         if not deal_id:
             return jsonify({"error": "Missing dealId", "success": False}), 400
 
-        if "file" not in request.files:
-            return jsonify({"error": "No file part", "success": False}), 400
+        # Collect all uploaded files regardless of key
+        files = list(request.files.values())
+        if not files:
+            return jsonify({"error": "No file received", "success": False}), 400
 
-        file = request.files["file"]
-        if file.filename == "":
-            return jsonify({"error": "No file selected", "success": False}), 400
+        response_files = []
 
-        filename = secure_filename(file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(save_path)
+        for file in files:
+            if file and allowed_file(file.filename):
+                # Save the file locally
+                filename = secure_filename(file.filename)
+                save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                file.save(save_path)
 
-        # Load workbook
-        workbook = load_workbook(save_path, data_only=True)
-        
-        if "RB Label" not in workbook.sheetnames:
-            return jsonify({"error": "Sheet 'RB Label' not found", "success": False}), 400
+                # Read Excel and get sheet names
+                workbook = load_workbook(save_path, read_only=True)
+                sheet_names = workbook.sheetnames
 
-        sheet = workbook["RB Label"]
-
-        # Identify columns
-        header = [cell.value for cell in sheet[1]]  # first row as header
-        try:
-            job_code_idx = header.index("Job Code")
-            fabric_label_idx = header.index("Fabric Label")
-        except ValueError as e:
-            return jsonify({"error": f"Required column missing: {str(e)}", "success": False}), 400
-
-        # Collect values
-        fabric_values = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if row[job_code_idx] not in (None, ""):
-                fabric_values.append(row[fabric_label_idx])
+                response_files.append({
+                    "filename": filename,
+                    "sheets": sheet_names
+                })
+            else:
+                response_files.append({
+                    "filename": file.filename,
+                    "error": "Invalid file type, only xls/xlsx allowed"
+                })
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "filename": filename,
-            "sheet": "RB Label",
-            "fabric_values": fabric_values,
-            "count": len(fabric_values),
-            "message": "File uploaded and processed successfully"
+            "files": response_files,
+            "message": "Files uploaded and processed successfully"
         })
 
     except Exception as e:
