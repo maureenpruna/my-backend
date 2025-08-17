@@ -36,13 +36,38 @@ def upload_file():
                 file.save(save_path)
 
                 # Read Excel and get sheet names
-                workbook = load_workbook(save_path, read_only=True)
+                workbook = load_workbook(save_path, data_only=True)
                 sheet_names = workbook.sheetnames
 
-                response_files.append({
+                file_response = {
                     "filename": filename,
                     "sheets": sheet_names
-                })
+                }
+
+                # Look specifically for "RB Label"
+                if "RB Label" in sheet_names:
+                    sheet = workbook["RB Label"]
+                    header = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))]
+
+                    try:
+                        job_code_idx = header.index("Job Code")
+                        fabric_label_idx = header.index("Fabric Label")
+                    except ValueError:
+                        # Column missing
+                        fabric_values = []
+                    else:
+                        # Collect Fabric Label values where Job Code is not empty
+                        fabric_values = [
+                            row[fabric_label_idx]
+                            for row in sheet.iter_rows(min_row=2, values_only=True)
+                            if row[job_code_idx] not in (None, "")
+                        ]
+
+                    file_response["fabric_values"] = fabric_values
+                    file_response["fabric_count"] = len(fabric_values)
+
+                response_files.append(file_response)
+
             else:
                 response_files.append({
                     "filename": file.filename,
