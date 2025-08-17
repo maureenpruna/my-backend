@@ -21,64 +21,39 @@ def upload_file():
         if not deal_id:
             return jsonify({"error": "Missing dealId", "success": False}), 400
 
-        # Collect all uploaded files regardless of key
+        # Get uploaded file
         files = list(request.files.values())
         if not files:
             return jsonify({"error": "No file received", "success": False}), 400
 
-        response_files = []
+        file = files[0]
+        if not file or not allowed_file(file.filename):
+            return jsonify({"error": "Invalid file type, only xls/xlsx allowed", "success": False}), 400
 
-        for file in files:
-            if file and allowed_file(file.filename):
-                # Save the file locally
-                filename = secure_filename(file.filename)
-                save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-                file.save(save_path)
+        # Save the file
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(save_path)
 
-                # Read Excel and get sheet names
-                workbook = load_workbook(save_path, data_only=True)
-                sheet_names = workbook.sheetnames
+        # Read Excel workbook
+        workbook = load_workbook(save_path, read_only=True)
+        if "RB Label" not in workbook.sheetnames:
+            return jsonify({"error": "'RB Label' sheet not found", "success": False}), 400
 
-                file_response = {
-                    "filename": filename,
-                    "sheets": sheet_names
-                }
-
-                # Look specifically for "RB Label"
-                if "RB Label" in sheet_names:
-                    sheet = workbook["RB Label"]
-                    header = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))]
-
-                    try:
-                        job_code_idx = header.index("Job Code")
-                        fabric_label_idx = header.index("Fabric Label")
-                    except ValueError:
-                        # Column missing
-                        fabric_values = []
-                    else:
-                        # Collect Fabric Label values where Job Code is not empty
-                        fabric_values = [
-                            row[fabric_label_idx]
-                            for row in sheet.iter_rows(min_row=2, values_only=True)
-                            if row[job_code_idx] not in (None, "")
-                        ]
-
-                    file_response["fabric_values"] = fabric_values
-                    file_response["fabric_count"] = len(fabric_values)
-
-                response_files.append(file_response)
-
-            else:
-                response_files.append({
-                    "filename": file.filename,
-                    "error": "Invalid file type, only xls/xlsx allowed"
-                })
+        sheet = workbook["RB Label"]
+        fabric_values = []
+        for row in sheet.iter_rows(min_row=2, values_only=True):  # skip header
+            job_code = row[0]  # Column A
+            fabric_label = row[22] if len(row) > 22 else None  # Column W
+            if job_code not in (None, "") and fabric_label not in (None, ""):
+                fabric_values.append(fabric_label)
 
         return jsonify({
             "success": True,
             "dealId": deal_id,
-            "files": response_files,
-            "message": "Files uploaded and processed successfully"
+            "fabric_labels_count": len(fabric_values),
+            "fabric_labels": fabric_values,
+            "message": "Fabric labels extracted successfully"
         })
 
     except Exception as e:
