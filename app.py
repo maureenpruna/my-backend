@@ -39,37 +39,22 @@ def upload_file():
                 # Open workbook
                 workbook = load_workbook(save_path, data_only=True, read_only=True)
 
-                # --- Process RB Label ---
-                rb_sheet = workbook["RB Label"] if "RB Label" in workbook.sheetnames else None
-                rb_data = {"Fabric Label": [], "Fabric Label count": 0,
-                           "Bottom Label": [], "Bottom Label count": 0}
-                if rb_sheet:
-                    for row in rb_sheet.iter_rows(min_row=2):
-                        if row[0].value:  # Column A is Job Code
-                            # Column W -> Fabric Label (index 22)
-                            if len(row) > 22:
-                                rb_data["Fabric Label"].append(row[22].value)
-                            # Column X -> Bottom Label (index 23)
-                            if len(row) > 23:
-                                rb_data["Bottom Label"].append(row[23].value)
-                    rb_data["Fabric Label count"] = len(rb_data["Fabric Label"])
-                    rb_data["Bottom Label count"] = len(rb_data["Bottom Label"])
-                result_data["RB"] = rb_data
+                # --- Process Label sheet only ---
+                label_sheet = workbook["Label"] if "Label" in workbook.sheetnames else None
+                label_data = {"Label_T": []}
+                if label_sheet:
+                    row_index = 1
+                    for row in label_sheet.iter_rows(min_row=2):
+                        if row[0].value:  # Column A must have a value
+                            entry = {
+                                "Row": row_index,
+                                "T1": row[0].value,
+                                "T2": row[1].value if len(row) > 1 else None
+                            }
+                            label_data["Label_T"].append(entry)
+                            row_index += 1
 
-                # --- Process CTN Label ---
-                ctn_sheet = workbook["CTN Label"] if "CTN Label" in workbook.sheetnames else None
-                ctn_data = {"Fabric Label": [], "Fabric Label count": 0,
-                            "Bottom Label": [], "Bottom Label count": 0}
-                if ctn_sheet:
-                    for row in ctn_sheet.iter_rows(min_row=2):
-                        if row[0].value:  # Column A is Job Code
-                            if len(row) > 22:
-                                ctn_data["Fabric Label"].append(row[22].value)
-                            if len(row) > 23:
-                                ctn_data["Bottom Label"].append(row[23].value)
-                    ctn_data["Fabric Label count"] = len(ctn_data["Fabric Label"])
-                    ctn_data["Bottom Label count"] = len(ctn_data["Bottom Label"])
-                result_data["CTN"] = ctn_data
+                result_data["Label"] = label_data
 
                 # Send data to Zoho CRM
                 crm_endpoint = "https://www.zohoapis.com.au/crm/v7/functions/parsedexceldata/actions/execute?auth_type=apikey&zapikey=1003.7aca215a9c900fecfbe589e436532a6a.560d726649a7d347aa1025a35d19c914"
