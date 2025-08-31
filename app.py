@@ -41,18 +41,25 @@ def upload_file():
 
                 # --- Process Label sheet only ---
                 label_sheet = workbook["Label"] if "Label" in workbook.sheetnames else None
-                label_data = {"Label_T": []}
+                label_data = {"Label_T": {}, "Label_TP": {}}
                 if label_sheet:
-                    row_index = 1
+                    row_index_t = 1
+                    row_index_tp = 1
                     for row in label_sheet.iter_rows(min_row=2):
-                        if row[0].value:  # Column A must have a value
-                            entry = {
-                                "Row": row_index,
+                        # Column A & B -> Label_T
+                        if row[0].value:  # A must have a value
+                            label_data["Label_T"][str(row_index_t)] = {
                                 "T1": row[0].value,
                                 "T2": row[1].value if len(row) > 1 else None
                             }
-                            label_data["Label_T"].append(entry)
-                            row_index += 1
+                            row_index_t += 1
+
+                        # Column C -> Label_TP
+                        if len(row) > 2 and row[2].value:
+                            label_data["Label_TP"][str(row_index_tp)] = {
+                                "TP": row[2].value
+                            }
+                            row_index_tp += 1
 
                 result_data["Label"] = label_data
 
