@@ -41,75 +41,60 @@ def upload_file():
 
                 # --- Process Label sheet only ---
                 label_sheet = workbook["Label"] if "Label" in workbook.sheetnames else None
+                # Use lists of maps as requested
                 label_data = {
-                    "Label_T": {},
-                    "Label_TP": {},
-                    "Label_C": {},
-                    "Label_L": {},
-                    "Label_CP": {},
-                    "Label_RT": {},
-                    "Label_RB": {},
-                    "Label_RP": {}
+                    "Label_T": [],   # [{T1, T2}, ...]  (A,B) include if A has value; B may be null
+                    "Label_TP": [],  # [{TP}, ...]      (C)   include if C has value
+                    "Label_C": [],   # [{C1, C2}, ...]  (D,E) include if D or E has value
+                    "Label_L": [],   # [{L1, L2}, ...]  (F,G) include if F or G has value
+                    "Label_CP": [],  # [{CP}, ...]      (H)   include if H has value
+                    "Label_RT": [],  # [{RT1, RT2}, ...](I,J) include if I or J has value
+                    "Label_RB": [],  # [{RB1, RB2}, ...](K,L) include if K or L has value
+                    "Label_RP": []   # [{RP}, ...]      (M)   include if M has value
                 }
+
                 if label_sheet:
-                    row_index = {
-                        "T": 1, "TP": 1, "C": 1, "L": 1,
-                        "CP": 1, "RT": 1, "RB": 1, "RP": 1
-                    }
                     for row in label_sheet.iter_rows(min_row=2):
-                        # Column A & B -> Label_T
-                        label_data["Label_T"][str(row_index["T"])] = {
-                            "T1": row[0].value if len(row) > 0 else None,
-                            "T2": row[1].value if len(row) > 1 else None
-                        }
-                        row_index["T"] += 1
+                        # Safely pull cell values by index
+                        val = lambda idx: (row[idx].value if len(row) > idx else None)
 
-                        # Column C -> Label_TP
-                        label_data["Label_TP"][str(row_index["TP"])] = {
-                            "TP": row[2].value if len(row) > 2 else None
-                        }
-                        row_index["TP"] += 1
+                        A = val(0); B = val(1); C = val(2); D = val(3); E = val(4)
+                        F = val(5); G = val(6); H = val(7); I = val(8); J = val(9)
+                        K = val(10); L = val(11); M = val(12)
 
-                        # Column D & E -> Label_C
-                        label_data["Label_C"][str(row_index["C"])] = {
-                            "C1": row[3].value if len(row) > 3 else None,
-                            "C2": row[4].value if len(row) > 4 else None
-                        }
-                        row_index["C"] += 1
+                        # Label_T: include only if A has value; B may be None
+                        if A is not None and A != "":
+                            label_data["Label_T"].append({"T1": A, "T2": B})
 
-                        # Column F & G -> Label_L
-                        label_data["Label_L"][str(row_index["L"])] = {
-                            "L1": row[5].value if len(row) > 5 else None,
-                            "L2": row[6].value if len(row) > 6 else None
-                        }
-                        row_index["L"] += 1
+                        # Label_TP: include only if C has value
+                        if C is not None and C != "":
+                            label_data["Label_TP"].append({"TP": C})
 
-                        # Column H -> Label_CP
-                        label_data["Label_CP"][str(row_index["CP"])] = {
-                            "CP": row[7].value if len(row) > 7 else None
-                        }
-                        row_index["CP"] += 1
+                        # Label_C: include if D or E has value
+                        if (D is not None and D != "") or (E is not None and E != ""):
+                            label_data["Label_C"].append({"C1": D, "C2": E})
 
-                        # Column I & J -> Label_RT
-                        label_data["Label_RT"][str(row_index["RT"])] = {
-                            "RT1": row[8].value if len(row) > 8 else None,
-                            "RT2": row[9].value if len(row) > 9 else None
-                        }
-                        row_index["RT"] += 1
+                        # Label_L: include if F or G has value
+                        if (F is not None and F != "") or (G is not None and G != ""):
+                            label_data["Label_L"].append({"L1": F, "L2": G})
 
-                        # Column K & L -> Label_RB
-                        label_data["Label_RB"][str(row_index["RB"])] = {
-                            "RB1": row[10].value if len(row) > 10 else None,
-                            "RB2": row[11].value if len(row) > 11 else None
-                        }
-                        row_index["RB"] += 1
+                        # Label_CP: include if H has value
+                        if H is not None and H != "":
+                            label_data["Label_CP"].append({"CP": H})
 
-                        # Column M -> Label_RP
-                        label_data["Label_RP"][str(row_index["RP"])] = {
-                            "RP": row[12].value if len(row) > 12 else None
-                        }
-                        row_index["RP"] += 1
+                        # Label_RT: include if I or J has value
+                        if (I is not None and I != "") or (J is not None and J != ""):
+                            label_data["Label_RT"].append({"RT1": I, "RT2": J})
 
+                        # Label_RB: include if K or L has value
+                        if (K is not None and K != "") or (L is not None and L != ""):
+                            label_data["Label_RB"].append({"RB1": K, "RB2": L})
+
+                        # Label_RP: include if M has value
+                        if M is not None and M != "":
+                            label_data["Label_RP"].append({"RP": M})
+
+                # Always include the Label key with all groups (lists may be empty)
                 result_data["Label"] = label_data
 
                 # Send data to Zoho CRM
