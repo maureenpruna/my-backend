@@ -41,25 +41,74 @@ def upload_file():
 
                 # --- Process Label sheet only ---
                 label_sheet = workbook["Label"] if "Label" in workbook.sheetnames else None
-                label_data = {"Label_T": {}, "Label_TP": {}}
+                label_data = {
+                    "Label_T": {},
+                    "Label_TP": {},
+                    "Label_C": {},
+                    "Label_L": {},
+                    "Label_CP": {},
+                    "Label_RT": {},
+                    "Label_RB": {},
+                    "Label_RP": {}
+                }
                 if label_sheet:
-                    row_index_t = 1
-                    row_index_tp = 1
+                    row_index = {
+                        "T": 1, "TP": 1, "C": 1, "L": 1,
+                        "CP": 1, "RT": 1, "RB": 1, "RP": 1
+                    }
                     for row in label_sheet.iter_rows(min_row=2):
                         # Column A & B -> Label_T
-                        if row[0].value:  # A must have a value
-                            label_data["Label_T"][str(row_index_t)] = {
-                                "T1": row[0].value,
-                                "T2": row[1].value if len(row) > 1 else None
-                            }
-                            row_index_t += 1
+                        label_data["Label_T"][str(row_index["T"])] = {
+                            "T1": row[0].value if len(row) > 0 else None,
+                            "T2": row[1].value if len(row) > 1 else None
+                        }
+                        row_index["T"] += 1
 
                         # Column C -> Label_TP
-                        if len(row) > 2 and row[2].value:
-                            label_data["Label_TP"][str(row_index_tp)] = {
-                                "TP": row[2].value
-                            }
-                            row_index_tp += 1
+                        label_data["Label_TP"][str(row_index["TP"])] = {
+                            "TP": row[2].value if len(row) > 2 else None
+                        }
+                        row_index["TP"] += 1
+
+                        # Column D & E -> Label_C
+                        label_data["Label_C"][str(row_index["C"])] = {
+                            "C1": row[3].value if len(row) > 3 else None,
+                            "C2": row[4].value if len(row) > 4 else None
+                        }
+                        row_index["C"] += 1
+
+                        # Column F & G -> Label_L
+                        label_data["Label_L"][str(row_index["L"])] = {
+                            "L1": row[5].value if len(row) > 5 else None,
+                            "L2": row[6].value if len(row) > 6 else None
+                        }
+                        row_index["L"] += 1
+
+                        # Column H -> Label_CP
+                        label_data["Label_CP"][str(row_index["CP"])] = {
+                            "CP": row[7].value if len(row) > 7 else None
+                        }
+                        row_index["CP"] += 1
+
+                        # Column I & J -> Label_RT
+                        label_data["Label_RT"][str(row_index["RT"])] = {
+                            "RT1": row[8].value if len(row) > 8 else None,
+                            "RT2": row[9].value if len(row) > 9 else None
+                        }
+                        row_index["RT"] += 1
+
+                        # Column K & L -> Label_RB
+                        label_data["Label_RB"][str(row_index["RB"])] = {
+                            "RB1": row[10].value if len(row) > 10 else None,
+                            "RB2": row[11].value if len(row) > 11 else None
+                        }
+                        row_index["RB"] += 1
+
+                        # Column M -> Label_RP
+                        label_data["Label_RP"][str(row_index["RP"])] = {
+                            "RP": row[12].value if len(row) > 12 else None
+                        }
+                        row_index["RP"] += 1
 
                 result_data["Label"] = label_data
 
